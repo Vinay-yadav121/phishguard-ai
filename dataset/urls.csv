@@ -1,0 +1,10 @@
+
+url,label
+https://google.com,0
+https://github.com,0
+https://wikipedia.org,0
+https://youtube.com,0
+http://192.168.1.1/login,1
+http://paypal-security-login.example.com,1
+http://verify-account.example.net,1
+http://secure-bank-login.example.org,1
