@@ -1,30 +1,78 @@
-
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+from pathlib import Path
 from urllib.parse import urlparse
+import joblib
 import re
 
-app = FastAPI(title="PhishGuard AI", version="1.0")
+app = FastAPI(
+    title="PhishGuard AI",
+    version="2.0",
+    description="ML-powered phishing URL detection"
+)
 
+# Frontend connection
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173"
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+# Load trained ML model
+MODEL_PATH = Path(__file__).parent / "phishing_model.pkl"
+model = joblib.load(MODEL_PATH)
+
 
 class URLRequest(BaseModel):
-    url: str
+    url: str = Field(min_length=1, max_length=2048)
+
+
+def get_phishing_class():
+    """Find the class representing phishing."""
+    classes = model.classes_
+
+    for label in classes:
+        name = str(label).lower()
+
+        if any(word in name for word in [
+            "phishing", "malicious", "unsafe", "bad"
+        ]):
+            return label
+
+    # For binary numeric labels, conventionally 1 = phishing
+    if 1 in classes:
+        return 1
+
+    # If labels are safe/legitimate and phishing is not identifiable,
+    # the model cannot safely determine the phishing class.
+    raise RuntimeError(
+        f"Cannot identify phishing class from labels: {classes}"
+    )
+
+
+PHISHING_CLASS = get_phishing_class()
 
 
 @app.get("/")
 def home():
     return {
         "message": "PhishGuard AI Backend Running",
-        "status": "success"
+        "status": "success",
+        "ml_model": "loaded"
+    }
+
+
+@app.get("/health")
+def health():
+    return {
+        "status": "healthy",
+        "model_loaded": model is not None
     }
 
 
@@ -36,36 +84,45 @@ def analyze_url(request: URLRequest):
         url = "https://" + url
 
     parsed = urlparse(url)
-    hostname = parsed.hostname or ""
-    score = 0
+
+    if not parsed.hostname:
+        raise HTTPException(
+            status_code=400,
+            detail="Please enter a valid URL"
+        )
+
+    # ML prediction
+    prediction = model.predict([url])[0]
+    probabilities = model.predict_proba([url])[0]
+
+    classes = list(model.classes_)
+    phishing_index = classes.index(PHISHING_CLASS)
+
+    phishing_probability = float(
+        probabilities[phishing_index]
+    )
+
+    risk_score = round(phishing_probability * 100, 2)
+
+    # URL security indicators
+    hostname = parsed.hostname.lower()
     reasons = []
 
-    # Check HTTPS
     if parsed.scheme != "https":
-        score += 20
         reasons.append("URL does not use HTTPS")
 
-    # Check IP address instead of domain
     if re.match(r"^\d{1,3}(\.\d{1,3}){3}$", hostname):
-        score += 25
         reasons.append("Website uses an IP address")
 
-    # Check suspicious symbols
     if "@" in url:
-        score += 25
         reasons.append("URL contains @ symbol")
 
-    # Check unusually long URL
     if len(url) > 75:
-        score += 15
         reasons.append("URL is unusually long")
 
-    # Check excessive subdomains
     if hostname.count(".") >= 3:
-        score += 15
         reasons.append("URL contains multiple subdomains")
 
-    # Check suspicious keywords
     suspicious_words = [
         "login", "verify", "update", "secure",
         "account", "password", "bank", "free",
@@ -73,24 +130,26 @@ def analyze_url(request: URLRequest):
     ]
 
     for word in suspicious_words:
-        if word in hostname.lower():
-            score += 10
+        if word in hostname:
             reasons.append(f"Suspicious keyword: {word}")
-            break
 
-    score = min(score, 100)
-
-    if score >= 50:
+    # Final classification based on ML probability
+    if risk_score >= 70:
         result = "Phishing"
-    elif score >= 25:
+    elif risk_score >= 40:
         result = "Suspicious"
     else:
         result = "Likely Safe"
 
     return {
         "url": url,
-        "risk_score": score,
         "result": result,
+        "risk_score": risk_score,
+        "confidence": round(
+            max(probabilities) * 100, 2
+        ),
+        "ml_prediction": str(prediction),
+        "detection_method": "TF-IDF + Logistic Regression",
         "reasons": reasons,
         "status": "success"
     }
