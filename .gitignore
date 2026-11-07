@@ -11,3 +11,5 @@ frontend/dist/
 # IDE
 .vscode/
 backend/phishguard.db
+
+backend/phishguard.db
