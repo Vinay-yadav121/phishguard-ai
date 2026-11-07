@@ -18,13 +18,14 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173"
+        "https://phishguard-ai-roan.vercel.app",
+        "http://localhost:5173"
     ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 # Load trained ML model
 MODEL_PATH = Path(__file__).parent / "phishing_model.pkl"
