@@ -19,6 +19,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "https://phishguard-ai-roan.vercel.app",
+        "https://phishguard-ai-roan.vercel.app",
         "http://localhost:5173"
     ],
     allow_credentials=True,
