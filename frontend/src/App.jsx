@@ -29,14 +29,17 @@ function App() {
         body: JSON.stringify({ url }),
       });
 
+      const data = await response.json();
+
       if (!response.ok) {
-        throw new Error("Backend request failed");
+        throw new Error(data.detail || "Scanning failed");
       }
 
-      const data = await response.json();
       setResult(data);
     } catch (err) {
-      setError("Unable to connect to backend. Check if FastAPI is running.");
+      setError(
+        "Backend connection failed. Make sure FastAPI is running on port 8000."
+      );
     } finally {
       setLoading(false);
     }
@@ -45,26 +48,23 @@ function App() {
   return (
     <div className="app">
       <nav className="navbar">
-        <div className="brand">
-          <span className="brand-icon">🛡️</span>
-          PhishGuard <span className="ai">AI</span>
-        </div>
-        <span className="nav-status">● System Online</span>
+        <h2>🛡️ PhishGuard AI</h2>
+        <span className="status">● AI Protection Active</span>
       </nav>
 
-      <main className="main">
-        <div className="hero">
-          <div className="tag">AI-POWERED CYBERSECURITY</div>
+      <main className="container">
+        <section className="hero">
+          <span className="tag">AI-POWERED CYBERSECURITY</span>
           <h1>
-            Detect Phishing.
+            Detect phishing.
             <br />
-            <span>Stay Protected.</span>
+            <span>Browse safely.</span>
           </h1>
           <p>
-            Analyze suspicious URLs with PhishGuard AI and identify
-            potential phishing threats before they reach you.
+            Analyze suspicious URLs using machine learning
+            and identify potential phishing threats.
           </p>
-        </div>
+        </section>
 
         <section className="scanner">
           <h2>🔍 URL Security Scanner</h2>
@@ -78,74 +78,67 @@ function App() {
               onChange={(e) => setUrl(e.target.value)}
             />
             <button type="submit" disabled={loading}>
-              {loading ? "Scanning..." : "Scan URL →"}
+              {loading ? "Scanning..." : "Scan URL"}
             </button>
           </form>
 
-          {error && <div className="error">{error}</div>}
+          {error && <p className="error">{error}</p>}
 
           {result && (
             <div className="result">
-              <h3>Scan Results</h3>
-              <div className="result-url">{result.url}</div>
+              <h2>{result.result}</h2>
 
-              <div className="score">
-                <span>{result.risk_score}</span>
-                <small>/100 Risk Score</small>
+              <div className="risk">
+                <span>Risk Score</span>
+                <strong>{result.risk_score}%</strong>
               </div>
 
-              <div
-                className={`status ${
-                  result.result === "Phishing"
-                    ? "danger"
-                    : result.result === "Suspicious"
-                    ? "warning"
-                    : "safe"
-                }`}
-              >
-                {result.result === "Phishing"
-                  ? "🚨 Phishing Detected"
-                  : result.result === "Suspicious"
-                  ? "⚠️ Suspicious URL"
-                  : "✅ Likely Safe"}
-              </div>
+              <p>
+                <strong>Confidence:</strong> {result.confidence}%
+              </p>
 
-              <h4>Detection Reasons</h4>
-              {result.reasons.length > 0 ? (
+              <p>
+                <strong>Detection:</strong> {result.detection_method}
+              </p>
+
+              <p>
+                <strong>URL:</strong> {result.url}
+              </p>
+
+              <h3>Detection Indicators</h3>
+
+              {result.reasons.length === 0 ? (
+                <p>No suspicious URL indicators detected.</p>
+              ) : (
                 <ul>
                   {result.reasons.map((reason, index) => (
-                    <li key={index}>{reason}</li>
+                    <li key={index}>⚠️ {reason}</li>
                   ))}
                 </ul>
-              ) : (
-                <p>No suspicious URL patterns detected.</p>
               )}
             </div>
           )}
         </section>
 
-        <div className="features">
+        <section className="features">
           <div className="feature">
-            <span>🔎</span>
-            <h3>URL Analysis</h3>
-            <p>Examine suspicious URL patterns.</p>
+            <h3>🤖 ML Detection</h3>
+            <p>TF-IDF and Logistic Regression classification.</p>
           </div>
+
           <div className="feature">
-            <span>🧠</span>
-            <h3>Risk Detection</h3>
-            <p>Identify potential phishing indicators.</p>
+            <h3>📊 Risk Analysis</h3>
+            <p>Risk score and confidence-based analysis.</p>
           </div>
+
           <div className="feature">
-            <span>⚡</span>
-            <h3>Instant Results</h3>
-            <p>Get a risk score within seconds.</p>
+            <h3>🔐 Security Awareness</h3>
+            <p>Identify suspicious URLs before opening them.</p>
           </div>
-        </div>
+        </section>
 
         <footer>
-          PhishGuard AI | Educational Cybersecurity Project
-          <br />
-          Always verify websites independently before sharing sensitive information.
+          PhishGuard AI | AI-Powered Phishing Detection Platform
         </footer>
       </main>
     </div>
