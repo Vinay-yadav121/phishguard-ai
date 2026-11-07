@@ -1,3 +1,5 @@
+import sqlite3
+from datetime import datetime
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
@@ -34,7 +36,6 @@ class URLRequest(BaseModel):
 
 
 def get_phishing_class():
-    """Find the class representing phishing."""
     classes = model.classes_
 
     for label in classes:
@@ -45,18 +46,35 @@ def get_phishing_class():
         ]):
             return label
 
-    # For binary numeric labels, conventionally 1 = phishing
+    # Numeric labels: 1 represents phishing
     if 1 in classes:
         return 1
 
-    # If labels are safe/legitimate and phishing is not identifiable,
-    # the model cannot safely determine the phishing class.
     raise RuntimeError(
-        f"Cannot identify phishing class from labels: {classes}"
+        f"Cannot identify phishing class: {classes}"
     )
 
 
 PHISHING_CLASS = get_phishing_class()
+# SQLite database
+DB_PATH = Path(__file__).parent / "phishguard.db"
+
+
+def init_db():
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS scans (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                url TEXT NOT NULL,
+                result TEXT NOT NULL,
+                risk_score REAL NOT NULL,
+                confidence REAL NOT NULL,
+                scanned_at TEXT NOT NULL
+            )
+        """)
+
+
+init_db()
 
 
 @app.get("/")
@@ -111,7 +129,11 @@ def analyze_url(request: URLRequest):
     if parsed.scheme != "https":
         reasons.append("URL does not use HTTPS")
 
-    if re.match(r"^\d{1,3}(\.\d{1,3}){3}$", hostname):
+    # Detect IPv4 address
+    if re.match(
+        r"^\d{1,3}(?:\.\d{1,3}){3}$",
+        hostname
+    ):
         reasons.append("Website uses an IP address")
 
     if "@" in url:
@@ -141,6 +163,25 @@ def analyze_url(request: URLRequest):
     else:
         result = "Likely Safe"
 
+        
+    # Save scan to SQLite database
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute(
+            """
+            INSERT INTO scans
+            (url, result, risk_score, confidence, scanned_at)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (
+                url,
+                result,
+                risk_score,
+                round(max(probabilities) * 100, 2),
+                datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            )
+        )
+
+
     return {
         "url": url,
         "result": result,
@@ -153,3 +194,21 @@ def analyze_url(request: URLRequest):
         "reasons": reasons,
         "status": "success"
     }
+
+@app.get("/history")
+def get_history():
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute(
+            "SELECT * FROM scans ORDER BY id DESC LIMIT 100"
+        ).fetchall()
+
+    return [dict(row) for row in rows]
+
+
+@app.delete("/history")
+def clear_history():
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute("DELETE FROM scans")
+
+    return {"message": "Scan history cleared"}
